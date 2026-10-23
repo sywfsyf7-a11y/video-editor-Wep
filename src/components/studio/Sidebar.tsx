@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import { SidebarTab } from '@/types/editor';
 import {
@@ -19,11 +19,100 @@ import {
   CheckCircle2,
   Languages,
   AudioWaveform,
+  Plus,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
-  const { activeSidebarTab, setActiveSidebarTab, addClipToTrack, setAIModalOpen } =
-    useEditorStore();
+  const {
+    activeSidebarTab,
+    setActiveSidebarTab,
+    addClipToTrack,
+    setAIModalOpen,
+    uploadedMedia,
+    addUploadedMedia,
+    currentTime,
+  } = useEditorStore();
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files).forEach((file) => {
+      const isVideo = file.type.startsWith('video');
+      const isAudio = file.type.startsWith('audio');
+      if (!isVideo && !isAudio) return;
+
+      const url = URL.createObjectURL(file);
+      const mediaId = `media-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+      if (isVideo) {
+        const video = document.createElement('video');
+        video.src = url;
+        video.muted = true;
+        video.playsInline = true;
+        video.onloadedmetadata = () => {
+          const duration = video.duration || 10;
+          video.currentTime = Math.min(1, duration / 2);
+          video.onseeked = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 160;
+            canvas.height = 90;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(video, 0, 0, 160, 90);
+            const thumbUrl = canvas.toDataURL('image/jpeg');
+
+            addUploadedMedia({
+              id: mediaId,
+              name: file.name,
+              type: 'video',
+              url,
+              duration,
+              thumbnailUrl: thumbUrl,
+            });
+
+            addClipToTrack('track-video-1', {
+              trackId: 'track-video-1',
+              title: file.name,
+              type: 'video',
+              startTime: currentTime,
+              duration: Math.min(duration, 15),
+              sourceUrl: url,
+              thumbnailUrl: thumbUrl,
+              volume: 100,
+              speed: 1,
+              opacity: 100,
+            });
+          };
+        };
+      } else {
+        const audio = document.createElement('audio');
+        audio.src = url;
+        audio.onloadedmetadata = () => {
+          const duration = audio.duration || 15;
+          addUploadedMedia({
+            id: mediaId,
+            name: file.name,
+            type: 'audio',
+            url,
+            duration,
+          });
+
+          addClipToTrack('track-audio-1', {
+            trackId: 'track-audio-1',
+            title: file.name,
+            type: 'audio',
+            startTime: currentTime,
+            duration: Math.min(duration, 30),
+            volume: 85,
+            speed: 1,
+            opacity: 100,
+          });
+        };
+      }
+    });
+  };
 
   const tabs: { id: SidebarTab; label: string; icon: React.ReactNode }[] = [
     { id: 'ai', label: 'أدوات AI', icon: <Sparkles className="w-5 h-5" /> },
@@ -36,8 +125,18 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside className="w-80 md:w-96 shrink-0 border-l border-zinc-800 bg-zinc-950 flex flex-col h-full select-none z-20">
+      {/* مدخل رفع الملفات المخفي */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileUpload}
+        multiple
+        accept="video/*,audio/*"
+        className="hidden"
+      />
+
       {/* شريط التبويبات العلوي */}
-      <div className="flex items-center border-b border-zinc-800 bg-zinc-900/40 p-1.5 gap-1 overflow-x-auto">
+      <div className="flex items-center border-b border-zinc-800 bg-zinc-900/40 p-1.5 gap-1 overflow-x-auto shrink-0">
         {tabs.map((tab) => {
           const isActive = activeSidebarTab === tab.id;
           return (
@@ -152,29 +251,78 @@ export const Sidebar: React.FC = () => {
         {activeSidebarTab === 'media' && (
           <div className="space-y-4">
             {/* منطقة الرفع */}
-            <div className="border-2 border-dashed border-zinc-700 hover:border-amber-500/60 rounded-2xl p-6 text-center bg-zinc-900/30 transition cursor-pointer group">
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-zinc-700 hover:border-amber-500/60 rounded-2xl p-6 text-center bg-zinc-900/30 transition cursor-pointer group"
+            >
               <UploadCloud className="w-10 h-10 text-zinc-500 group-hover:text-amber-400 mx-auto mb-2 transition" />
               <h4 className="text-xs font-bold text-zinc-200 mb-1">اسحب ملفات الفيديو والصوت هنا</h4>
               <p className="text-[10px] text-zinc-500 mb-3">
                 يدعم MP4, MOV, WebM, MP3, WAV (حتى دقة 8K)
               </p>
-              <button className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold rounded-xl transition">
+              <button
+                type="button"
+                className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold rounded-xl transition"
+              >
                 تصفح من جهازك
               </button>
             </div>
 
+            {/* ملفات المستخدم المرفوعة */}
+            {uploadedMedia.length > 0 && (
+              <div>
+                <h4 className="text-xs font-bold text-amber-400 mb-2 flex items-center gap-1.5">
+                  <span>ملفاتك المرفوعة</span>
+                  <span className="text-[10px] bg-amber-500/20 px-1.5 rounded-full">{uploadedMedia.length}</span>
+                </h4>
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  {uploadedMedia.map((m) => (
+                    <div
+                      key={m.id}
+                      onClick={() =>
+                        addClipToTrack(m.type === 'video' ? 'track-video-1' : 'track-audio-1', {
+                          trackId: m.type === 'video' ? 'track-video-1' : 'track-audio-1',
+                          title: m.name,
+                          type: m.type,
+                          startTime: currentTime,
+                          duration: Math.min(m.duration, 20),
+                          sourceUrl: m.url,
+                          thumbnailUrl: m.thumbnailUrl,
+                          volume: 100,
+                          speed: 1,
+                          opacity: 100,
+                        })
+                      }
+                      className="relative group bg-zinc-900 border border-amber-500/30 hover:border-amber-400 rounded-xl overflow-hidden cursor-pointer p-1 transition"
+                    >
+                      {m.thumbnailUrl ? (
+                        <img src={m.thumbnailUrl} alt="" className="w-full h-16 object-cover rounded-lg" />
+                      ) : (
+                        <div className="w-full h-16 bg-zinc-800 rounded-lg flex items-center justify-center text-amber-400">
+                          <Music className="w-6 h-6" />
+                        </div>
+                      )}
+                      <div className="p-1 text-[10px] font-semibold text-zinc-200 truncate">{m.name}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* مكتبة المقاطع الحالية */}
             <div>
-              <h4 className="text-xs font-bold text-zinc-400 mb-2">مقاطع المشروع</h4>
+              <h4 className="text-xs font-bold text-zinc-400 mb-2">مقاطع سينمائية نموذجية</h4>
               <div className="grid grid-cols-2 gap-2">
                 <div
                   onClick={() =>
                     addClipToTrack('track-video-1', {
                       trackId: 'track-video-1',
-                      title: 'لقطة إضافية سينمائية',
+                      title: 'لقطة طبيعة 4K',
                       type: 'video',
-                      startTime: 17.5,
+                      startTime: currentTime,
                       duration: 6.0,
+                      sourceUrl:
+                        'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=800',
                       thumbnailUrl:
                         'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=200',
                       volume: 100,
@@ -201,10 +349,12 @@ export const Sidebar: React.FC = () => {
                   onClick={() =>
                     addClipToTrack('track-video-1', {
                       trackId: 'track-video-1',
-                      title: 'مشهد حضري ليلي',
+                      title: 'مشهد حضري ليلي 8K',
                       type: 'video',
-                      startTime: 23.5,
+                      startTime: currentTime,
                       duration: 5.0,
+                      sourceUrl:
+                        'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800',
                       thumbnailUrl:
                         'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=200',
                       volume: 100,
@@ -235,14 +385,14 @@ export const Sidebar: React.FC = () => {
         {activeSidebarTab === 'text' && (
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-zinc-400">قوالب نصوص عربية جاهزة</h4>
-            
+
             <button
               onClick={() =>
                 addClipToTrack('track-text-1', {
                   trackId: 'track-text-1',
                   title: 'عنوان سينمائي عريض',
                   type: 'text',
-                  startTime: 5.0,
+                  startTime: currentTime,
                   duration: 4.0,
                   textContent: 'عنوان جذاب وجريء',
                   fontSize: 48,
@@ -253,7 +403,7 @@ export const Sidebar: React.FC = () => {
                   speed: 1,
                 })
               }
-              className="w-full p-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/50 rounded-xl text-right transition"
+              className="w-full p-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/50 rounded-xl text-right transition"
             >
               <div className="text-lg font-black text-amber-400 font-sans">عنوان رئيسي ضخم</div>
               <div className="text-[10px] text-zinc-400">مناسب للمقدمات واليوتيوب (Cairo Black)</div>
@@ -265,7 +415,7 @@ export const Sidebar: React.FC = () => {
                   trackId: 'track-text-1',
                   title: 'شريط سفلي Lower Third',
                   type: 'text',
-                  startTime: 10.0,
+                  startTime: currentTime,
                   duration: 5.0,
                   textContent: 'م. سيف - خبير الذكاء الاصطناعي',
                   fontSize: 24,
@@ -276,7 +426,7 @@ export const Sidebar: React.FC = () => {
                   speed: 1,
                 })
               }
-              className="w-full p-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-indigo-500/50 rounded-xl text-right transition"
+              className="w-full p-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-indigo-500/50 rounded-xl text-right transition"
             >
               <div className="text-sm font-bold text-indigo-300">شريط تعريفي (Lower Third)</div>
               <div className="text-[10px] text-zinc-400">لأسماء المتحدثين والمقابلات</div>
@@ -300,7 +450,7 @@ export const Sidebar: React.FC = () => {
                       trackId: 'track-audio-1',
                       title: 'Cinematic Trailer Beats',
                       type: 'audio',
-                      startTime: 5.0,
+                      startTime: currentTime,
                       duration: 15.0,
                       volume: 80,
                       speed: 1,
@@ -324,7 +474,7 @@ export const Sidebar: React.FC = () => {
                       trackId: 'track-audio-1',
                       title: 'Whoosh SFX',
                       type: 'audio',
-                      startTime: 8.5,
+                      startTime: currentTime,
                       duration: 2.0,
                       volume: 90,
                       speed: 1,
@@ -360,17 +510,20 @@ export const Sidebar: React.FC = () => {
         {/* ================= تبويب الفلاتر ================= */}
         {activeSidebarTab === 'effects' && (
           <div className="grid grid-cols-2 gap-2">
-            {['سينمائي دافئ (Warm Cinema)', 'سايبر بانك (Cyberpunk)', 'أبيض وأسود (Classic B&W)', 'درامي بارد (Cold Drama)'].map(
-              (eff, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 rounded-xl text-center cursor-pointer transition"
-                >
-                  <Sliders className="w-6 h-6 text-indigo-400 mx-auto mb-1.5" />
-                  <span className="text-[11px] font-bold text-zinc-300">{eff}</span>
-                </div>
-              )
-            )}
+            {[
+              'سينمائي دافئ (Warm Cinema)',
+              'سايبر بانك (Cyberpunk)',
+              'أبيض وأسود (Classic B&W)',
+              'درامي بارد (Cold Drama)',
+            ].map((eff, idx) => (
+              <div
+                key={idx}
+                className="p-3 bg-zinc-900 border border-zinc-800 hover:border-amber-500/50 rounded-xl text-center cursor-pointer transition"
+              >
+                <Sliders className="w-6 h-6 text-indigo-400 mx-auto mb-1.5" />
+                <span className="text-[11px] font-bold text-zinc-300">{eff}</span>
+              </div>
+            ))}
           </div>
         )}
       </div>

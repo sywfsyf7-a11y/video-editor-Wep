@@ -22,6 +22,7 @@ interface EditorState {
   
   // التراكات والمقاطع
   tracks: Track[];
+  uploadedMedia: { id: string; name: string; type: 'video' | 'audio'; url: string; duration: number; thumbnailUrl?: string }[];
   
   // وظائف التحكم
   setProjectTitle: (title: string) => void;
@@ -30,11 +31,13 @@ interface EditorState {
   setFps: (fps: number) => void;
   setCurrentTime: (time: number) => void;
   togglePlay: () => void;
+  setIsPlaying: (playing: boolean) => void;
   setZoom: (zoom: number) => void;
   selectClip: (id: string | null) => void;
   setActiveSidebarTab: (tab: SidebarTab) => void;
   setExportModalOpen: (open: boolean) => void;
   setAIModalOpen: (open: boolean) => void;
+  addUploadedMedia: (media: { id: string; name: string; type: 'video' | 'audio'; url: string; duration: number; thumbnailUrl?: string }) => void;
   
   // عمليات التحرير على المقاطع
   updateClip: (id: string, updates: Partial<Clip>) => void;
@@ -148,6 +151,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   isAIModalOpen: false,
   
   tracks: initialTracks,
+  uploadedMedia: [],
   
   setProjectTitle: (title) => set({ projectTitle: title }),
   setResolution: (res) => set({ resolution: res }),
@@ -155,11 +159,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setFps: (fps) => set({ fps }),
   setCurrentTime: (time) => set({ currentTime: Math.max(0, Math.min(time, get().duration)) }),
   togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
+  setIsPlaying: (playing) => set({ isPlaying: playing }),
   setZoom: (zoom) => set({ zoom: Math.max(10, Math.min(zoom, 100)) }),
   selectClip: (id) => set({ selectedClipId: id }),
   setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
   setExportModalOpen: (open) => set({ isExportModalOpen: open }),
   setAIModalOpen: (open) => set({ isAIModalOpen: open }),
+  addUploadedMedia: (media) => set((state) => ({ uploadedMedia: [media, ...state.uploadedMedia] })),
   
   updateClip: (id, updates) =>
     set((state) => ({

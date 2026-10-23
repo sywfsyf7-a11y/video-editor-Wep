@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { useEditorStore } from '@/store/editorStore';
 import {
   Scissors,
@@ -34,25 +34,54 @@ export const Timeline: React.FC = () => {
   } = useEditorStore();
 
   const timelineContainerRef = useRef<HTMLDivElement>(null);
+  const [isScrubbing, setIsScrubbing] = useState(false);
 
   // حساب موضع مؤشر الوقت (Playhead) بالبكسل
   const playheadPositionPx = currentTime * zoom;
-  const totalTimelineWidthPx = Math.max(duration * zoom, 1200);
+  const totalTimelineWidthPx = Math.max(duration * zoom, 1400);
 
-  // النقر على مسطرة الوقت لتحريك المؤشر
-  const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!timelineContainerRef.current) return;
-    const rect = timelineContainerRef.current.getBoundingClientRect();
-    const scrollLeft = timelineContainerRef.current.scrollLeft;
-    const clickX = e.clientX - rect.left + scrollLeft;
-    const newTime = Math.max(0, Math.min(clickX / zoom, duration));
-    setCurrentTime(newTime);
+  // تحديث الوقت عند النقر أو السحب
+  const updateTimeFromPointer = useCallback(
+    (clientX: number) => {
+      if (!timelineContainerRef.current) return;
+      const rect = timelineContainerRef.current.getBoundingClientRect();
+      const scrollLeft = timelineContainerRef.current.scrollLeft;
+      const clickX = clientX - rect.left + scrollLeft;
+      const newTime = Math.max(0, Math.min(clickX / zoom, duration));
+      setCurrentTime(newTime);
+    },
+    [zoom, duration, setCurrentTime]
+  );
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsScrubbing(true);
+    updateTimeFromPointer(e.clientX);
   };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isScrubbing) return;
+      updateTimeFromPointer(e.clientX);
+    };
+
+    const handleMouseUp = () => {
+      if (isScrubbing) setIsScrubbing(false);
+    };
+
+    if (isScrubbing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isScrubbing, updateTimeFromPointer]);
 
   // توليد علامات الثواني للمسطرة
   const renderTimeRuler = () => {
     const marks = [];
-    const step = zoom < 25 ? 5 : zoom < 50 ? 2 : 1; // خطوة العلامات حسب الزووم
+    const step = zoom < 25 ? 5 : zoom < 50 ? 2 : 1;
     for (let sec = 0; sec <= duration; sec += step) {
       const mins = Math.floor(sec / 60);
       const remainingSecs = Math.floor(sec % 60);
@@ -71,15 +100,32 @@ export const Timeline: React.FC = () => {
     return marks;
   };
 
+  // رسم موجة صوتية عشوائية جمالية (Audio Waveform)
+  const renderWaveform = (clipId: string) => {
+    const bars = [];
+    const seed = clipId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    for (let i = 0; i < 40; i++) {
+      const heightPercent = 20 + Math.abs(Math.sin(seed + i * 0.7)) * 75;
+      bars.push(
+        <div
+          key={i}
+          style={{ height: `${heightPercent}%` }}
+          className="w-1 bg-emerald-400/50 rounded-full shrink-0"
+        />
+      );
+    }
+    return <div className="absolute inset-x-2 bottom-1.5 top-5 flex items-center gap-0.5 overflow-hidden opacity-60 pointer-events-none">{bars}</div>;
+  };
+
   return (
     <div className="h-72 shrink-0 w-full border-t border-zinc-800 bg-zinc-950 flex flex-col select-none z-20">
       {/* شريط أدوات التايم لاين العلوي */}
-      <div className="h-11 border-b border-zinc-800/80 px-4 flex items-center justify-between bg-zinc-900/50">
+      <div className="h-11 border-b border-zinc-800/80 px-4 flex items-center justify-between bg-zinc-900/50 shrink-0">
         {/* أزرار العمليات: قص، حذف، مغناطيس */}
         <div className="flex items-center gap-1">
           <button
             onClick={splitSelectedClip}
-            className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800 hover:bg-amber-500 hover:text-zinc-950 text-zinc-300 rounded-lg text-xs font-bold transition"
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800 hover:bg-amber-500 hover:text-zinc-950 text-zinc-300 rounded-lg text-xs font-bold transition active:scale-95"
             title="تقسيم المقطع عند المؤشر (S)"
           >
             <Scissors className="w-3.5 h-3.5" />
@@ -88,7 +134,7 @@ export const Timeline: React.FC = () => {
 
           <button
             onClick={deleteSelectedClip}
-            className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800 hover:bg-red-500 hover:text-white text-zinc-300 rounded-lg text-xs font-bold transition"
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800 hover:bg-red-500 hover:text-white text-zinc-300 rounded-lg text-xs font-bold transition active:scale-95"
             title="حذف المقطع المحدد (Delete)"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -133,7 +179,7 @@ export const Timeline: React.FC = () => {
       </div>
 
       {/* مساحة التراكات ومسار المؤشر */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* أسماء التراكات والأقفال الجانبية (Track Headers) */}
         <div className="w-44 border-l border-zinc-800 bg-zinc-950 flex flex-col shrink-0 z-10">
           <div className="h-7 border-b border-zinc-800 bg-zinc-900/30 flex items-center px-3 text-[10px] font-bold text-zinc-500">
@@ -183,7 +229,7 @@ export const Timeline: React.FC = () => {
         {/* مساحة الخط الزمني القابلة للسحب (Scrollable Timeline Canvas) */}
         <div
           ref={timelineContainerRef}
-          onClick={handleTimelineClick}
+          onMouseDown={handleMouseDown}
           className="flex-1 overflow-x-auto overflow-y-hidden relative bg-zinc-950/70 cursor-pointer"
         >
           {/* مسطرة الثواني */}
@@ -232,8 +278,11 @@ export const Timeline: React.FC = () => {
                           : 'bg-gradient-to-r from-emerald-950 to-teal-900 text-emerald-200'
                       }`}
                     >
+                      {/* موجات الصوت لمسار الصوت */}
+                      {clip.type === 'audio' && renderWaveform(clip.id)}
+
                       {/* محتوى المقطع */}
-                      <div className="flex items-center gap-1.5 truncate">
+                      <div className="flex items-center gap-1.5 truncate z-10">
                         {clip.thumbnailUrl && (
                           <img
                             src={clip.thumbnailUrl}
@@ -244,7 +293,7 @@ export const Timeline: React.FC = () => {
                         <span className="text-[11px] font-bold truncate">{clip.title}</span>
                       </div>
 
-                      <span className="text-[9px] font-mono opacity-60 shrink-0">
+                      <span className="text-[9px] font-mono opacity-60 shrink-0 z-10">
                         {clip.duration.toFixed(1)}s
                       </span>
                     </div>
