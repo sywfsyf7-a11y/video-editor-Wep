@@ -72,7 +72,7 @@ export const Timeline: React.FC = () => {
   };
 
   return (
-    <div className="h-72 border-t border-zinc-800 bg-zinc-950 flex flex-col select-none z-20">
+    <div className="h-72 shrink-0 w-full border-t border-zinc-800 bg-zinc-950 flex flex-col select-none z-20">
       {/* شريط أدوات التايم لاين العلوي */}
       <div className="h-11 border-b border-zinc-800/80 px-4 flex items-center justify-between bg-zinc-900/50">
         {/* أزرار العمليات: قص، حذف، مغناطيس */}

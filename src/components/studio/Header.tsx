@@ -30,7 +30,7 @@ export const Header: React.FC = () => {
   const currentRes = RESOLUTIONS[resolution];
 
   return (
-    <header className="h-16 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur px-4 flex items-center justify-between select-none z-30">
+    <header className="h-16 shrink-0 w-full border-b border-zinc-800 bg-zinc-950/90 backdrop-blur px-4 flex items-center justify-between select-none z-30">
       {/* القسم الأيمن: الشعار واسم المشروع */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2.5 bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-1.5 rounded-xl shadow-lg shadow-amber-500/20 text-white font-bold">

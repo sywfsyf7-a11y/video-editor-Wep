@@ -11,12 +11,12 @@ import { AIStudioModal } from '@/components/studio/AIStudioModal';
 
 export default function StudioPage() {
   return (
-    <main className="flex-1 flex flex-col h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 select-none">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 select-none">
       {/* 1. الشريط العلوي */}
       <Header />
 
       {/* 2. منطقة العمل الرئيسية (الشريط الجانبي + مشغل المعاينة + لوحة الخصائص) */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div className="flex-1 flex flex-row overflow-hidden min-h-0 min-w-0 w-full relative">
         {/* شريط الأدوات والوسائط الجانبي */}
         <Sidebar />
 
@@ -33,6 +33,6 @@ export default function StudioPage() {
       {/* 4. النوافذ المنبثقة: التصدير واستوديو الذكاء الاصطناعي */}
       <ExportModal />
       <AIStudioModal />
-    </main>
+    </div>
   );
 }

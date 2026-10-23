@@ -50,21 +50,21 @@ export const PreviewPlayer: React.FC = () => {
   const getAspectRatioClasses = () => {
     switch (aspectRatio) {
       case '9:16':
-        return 'aspect-[9/16] max-h-[85%]';
+        return 'aspect-[9/16] h-full max-h-[440px] max-w-full';
       case '1:1':
-        return 'aspect-square max-h-[85%]';
+        return 'aspect-square h-full max-h-[440px] max-w-full';
       case '4:5':
-        return 'aspect-[4/5] max-h-[85%]';
+        return 'aspect-[4/5] h-full max-h-[440px] max-w-full';
       case '21:9':
-        return 'aspect-[21/9] w-[95%]';
+        return 'aspect-[21/9] w-full max-w-[760px] max-h-[440px]';
       case '16:9':
       default:
-        return 'aspect-video w-[90%] max-h-[85%]';
+        return 'aspect-video w-full max-w-[760px] max-h-[440px]';
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 items-center justify-between p-4 overflow-hidden relative select-none">
+    <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-zinc-950 items-center justify-between p-4 overflow-hidden relative select-none">
       {/* شارة جودة العرض ومعلومات الدقة */}
       <div className="w-full flex items-center justify-between px-2 text-xs z-10">
         <div className="flex items-center gap-2">

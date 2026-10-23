@@ -25,7 +25,7 @@ export const Inspector: React.FC = () => {
 
   if (!selectedClip) {
     return (
-      <aside className="w-72 border-r border-zinc-800 bg-zinc-950 p-4 flex flex-col items-center justify-center text-center select-none text-zinc-500">
+      <aside className="w-72 shrink-0 border-r border-zinc-800 bg-zinc-950 p-4 flex flex-col items-center justify-center text-center select-none text-zinc-500">
         <Sliders className="w-8 h-8 mb-2 opacity-40" />
         <h4 className="text-xs font-bold text-zinc-400">لا يوجد مقطع محدد</h4>
         <p className="text-[11px] text-zinc-600 mt-1 max-w-[180px]">
@@ -36,7 +36,7 @@ export const Inspector: React.FC = () => {
   }
 
   return (
-    <aside className="w-72 md:w-80 border-r border-zinc-800 bg-zinc-950 p-4 flex flex-col h-full overflow-y-auto select-none space-y-5">
+    <aside className="w-72 md:w-80 shrink-0 border-r border-zinc-800 bg-zinc-950 p-4 flex flex-col h-full overflow-y-auto select-none space-y-5">
       {/* رأس لوحة الخصائص */}
       <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
         <div>

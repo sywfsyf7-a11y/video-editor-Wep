@@ -35,7 +35,7 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="w-80 md:w-96 border-l border-zinc-800 bg-zinc-950 flex flex-col h-full select-none">
+    <aside className="w-80 md:w-96 shrink-0 border-l border-zinc-800 bg-zinc-950 flex flex-col h-full select-none z-20">
       {/* شريط التبويبات العلوي */}
       <div className="flex items-center border-b border-zinc-800 bg-zinc-900/40 p-1.5 gap-1 overflow-x-auto">
         {tabs.map((tab) => {
