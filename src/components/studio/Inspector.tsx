@@ -11,14 +11,70 @@ import {
   Sparkles,
   Trash2,
   Scissors,
-  Layers,
+  Sun,
+  Contrast,
+  Droplets,
+  Palette,
 } from 'lucide-react';
+
+// مساعد لعرض شريط التمرير مع قيمته
+function GradeSlider({
+  label,
+  icon,
+  value,
+  min,
+  max,
+  defaultVal,
+  unit,
+  onChange,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  value: number;
+  min: number;
+  max: number;
+  defaultVal: number;
+  unit?: string;
+  onChange: (v: number) => void;
+}) {
+  const isDefault = value === defaultVal;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-zinc-400 flex items-center gap-1.5">
+          {icon}
+          {label}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <span className={`font-mono font-bold ${isDefault ? 'text-zinc-500' : 'text-amber-400'}`}>
+            {value}{unit}
+          </span>
+          {!isDefault && (
+            <button
+              onClick={() => onChange(defaultVal)}
+              className="text-[9px] text-zinc-500 hover:text-zinc-200 bg-zinc-800 px-1.5 py-0.5 rounded font-bold transition"
+            >
+              إعادة ضبط
+            </button>
+          )}
+        </div>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-amber-500 cursor-pointer"
+      />
+    </div>
+  );
+}
 
 export const Inspector: React.FC = () => {
   const { tracks, selectedClipId, updateClip, deleteSelectedClip, splitSelectedClip } =
     useEditorStore();
 
-  // العثور على المقطع المحدد حالياً
   const selectedClip = tracks
     .flatMap((t) => t.clips)
     .find((c) => c.id === selectedClipId);
@@ -35,13 +91,30 @@ export const Inspector: React.FC = () => {
     );
   }
 
+  // قيم ضبط الألوان مع الافتراضيات
+  const brightness = selectedClip.brightness ?? 100;
+  const contrast = selectedClip.contrast ?? 100;
+  const saturation = selectedClip.saturation ?? 100;
+  const hue = selectedClip.hue ?? 0;
+
+  const hasColorGrading =
+    brightness !== 100 || contrast !== 100 || saturation !== 100 || hue !== 0;
+
+  const resetColorGrading = () => {
+    updateClip(selectedClip.id, { brightness: 100, contrast: 100, saturation: 100, hue: 0 });
+  };
+
   return (
     <aside className="w-72 md:w-80 shrink-0 border-r border-zinc-800 bg-zinc-950 p-4 flex flex-col h-full overflow-y-auto select-none space-y-5">
-      {/* رأس لوحة الخصائص */}
+      {/* رأس اللوحة */}
       <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
         <div>
           <span className="text-[10px] uppercase font-bold text-amber-500">
-            {selectedClip.type === 'video' ? 'خصائص الفيديو' : selectedClip.type === 'text' ? 'خصائص النص' : 'خصائص الصوت'}
+            {selectedClip.type === 'video'
+              ? 'خصائص الفيديو'
+              : selectedClip.type === 'text'
+              ? 'خصائص النص'
+              : 'خصائص الصوت'}
           </span>
           <h3 className="text-xs font-bold text-zinc-200 truncate max-w-[170px]">
             {selectedClip.title}
@@ -65,7 +138,7 @@ export const Inspector: React.FC = () => {
         </div>
       </div>
 
-      {/* إذا كان مقطع نص */}
+      {/* محرر النص */}
       {selectedClip.type === 'text' && (
         <div className="space-y-3">
           <label className="text-xs font-bold text-zinc-300 flex items-center gap-2">
@@ -96,7 +169,7 @@ export const Inspector: React.FC = () => {
         </div>
       )}
 
-      {/* تحكم السرعة Speed */}
+      {/* السرعة */}
       <div className="space-y-2 bg-zinc-900/60 p-3 rounded-2xl border border-zinc-800/80">
         <div className="flex items-center justify-between text-xs">
           <span className="text-zinc-400 flex items-center gap-1.5">
@@ -121,7 +194,7 @@ export const Inspector: React.FC = () => {
         </div>
       </div>
 
-      {/* تحكم مستوى الصوت Volume */}
+      {/* الصوت */}
       <div className="space-y-2 bg-zinc-900/60 p-3 rounded-2xl border border-zinc-800/80">
         <div className="flex items-center justify-between text-xs">
           <span className="text-zinc-400 flex items-center gap-1.5">
@@ -139,7 +212,7 @@ export const Inspector: React.FC = () => {
         />
       </div>
 
-      {/* تحكم الشفافية Opacity */}
+      {/* الشفافية */}
       <div className="space-y-2 bg-zinc-900/60 p-3 rounded-2xl border border-zinc-800/80">
         <div className="flex items-center justify-between text-xs">
           <span className="text-zinc-400 flex items-center gap-1.5">
@@ -157,7 +230,80 @@ export const Inspector: React.FC = () => {
         />
       </div>
 
-      {/* تحسينات الذكاء الاصطناعي للمقطع */}
+      {/* ==================== ضبط الألوان (Color Grading) ==================== */}
+      {(selectedClip.type === 'video' || selectedClip.type === 'text') && (
+        <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800/80 space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-zinc-200 flex items-center gap-2">
+              <Palette className="w-3.5 h-3.5 text-amber-400" />
+              ضبط الألوان (Color Grading)
+            </span>
+            {hasColorGrading && (
+              <button
+                onClick={resetColorGrading}
+                className="text-[10px] text-zinc-400 hover:text-red-400 bg-zinc-800 hover:bg-red-500/10 px-2 py-0.5 rounded-lg font-bold transition"
+              >
+                إعادة ضبط الكل
+              </button>
+            )}
+          </div>
+
+          <GradeSlider
+            label="السطوع"
+            icon={<Sun className="w-3.5 h-3.5 text-yellow-400" />}
+            value={brightness}
+            min={50}
+            max={150}
+            defaultVal={100}
+            unit="%"
+            onChange={(v) => updateClip(selectedClip.id, { brightness: v })}
+          />
+
+          <GradeSlider
+            label="التباين"
+            icon={<Contrast className="w-3.5 h-3.5 text-zinc-300" />}
+            value={contrast}
+            min={50}
+            max={150}
+            defaultVal={100}
+            unit="%"
+            onChange={(v) => updateClip(selectedClip.id, { contrast: v })}
+          />
+
+          <GradeSlider
+            label="التشبع"
+            icon={<Droplets className="w-3.5 h-3.5 text-blue-400" />}
+            value={saturation}
+            min={0}
+            max={200}
+            defaultVal={100}
+            unit="%"
+            onChange={(v) => updateClip(selectedClip.id, { saturation: v })}
+          />
+
+          <GradeSlider
+            label="درجة اللون (Hue)"
+            icon={<Palette className="w-3.5 h-3.5 text-purple-400" />}
+            value={hue}
+            min={-180}
+            max={180}
+            defaultVal={0}
+            unit="°"
+            onChange={(v) => updateClip(selectedClip.id, { hue: v })}
+          />
+
+          {/* معاينة مدمجة للفلتر */}
+          {hasColorGrading && (
+            <div className="mt-1 p-2 bg-zinc-950 rounded-xl border border-zinc-800 flex items-center gap-2 text-[10px] text-zinc-400">
+              <span className="font-mono text-[9px] text-amber-400/80 font-bold truncate">
+                filter: brightness({brightness}%) contrast({contrast}%) saturate({saturation}%) hue-rotate({hue}deg)
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* AI Enhancement */}
       <div className="p-3 bg-gradient-to-br from-purple-950/30 to-zinc-900 border border-purple-500/20 rounded-2xl space-y-2.5">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">

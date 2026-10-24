@@ -172,6 +172,12 @@ export const PreviewPlayer: React.FC = () => {
           {tracks.find((t) => t.type === 'video')?.clips.map((clip) => {
             if (!clip.sourceUrl?.startsWith('blob:')) return null;
             const isActive = currentTime >= clip.startTime && currentTime < clip.startTime + clip.duration;
+            // بناء فلتر ضبط الألوان
+            const brightness = clip.brightness ?? 100;
+            const contrast = clip.contrast ?? 100;
+            const saturation = clip.saturation ?? 100;
+            const hue = clip.hue ?? 0;
+            const filterStyle = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
             return (
               <video
                 key={clip.id}
@@ -180,7 +186,11 @@ export const PreviewPlayer: React.FC = () => {
                   else videoRefs.current.delete(clip.id);
                 }}
                 src={clip.sourceUrl}
-                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-150 ${isActive ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                style={{
+                  filter: filterStyle,
+                  opacity: (isActive ? clip.opacity ?? 100 : 0) / 100,
+                }}
+                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-150 ${isActive ? '' : 'pointer-events-none'}`}
                 muted={false}
                 playsInline
                 preload="auto"

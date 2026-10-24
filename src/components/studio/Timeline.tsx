@@ -2,6 +2,7 @@
 
 import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { useEditorStore } from '@/store/editorStore';
+import { Clip } from '@/types/editor';
 import {
   Scissors,
   Trash2,
@@ -17,6 +18,16 @@ import {
   Music,
 } from 'lucide-react';
 
+// ========================
+// أنواع السحب على التايم لاين
+// ========================
+type DragMode =
+  | { kind: 'none' }
+  | { kind: 'scrub' }
+  | { kind: 'move'; clipId: string; trackId: string; startX: number; origStart: number }
+  | { kind: 'trim-left'; clipId: string; trackId: string; startX: number; origStart: number; origDuration: number }
+  | { kind: 'trim-right'; clipId: string; trackId: string; startX: number; origDuration: number };
+
 export const Timeline: React.FC = () => {
   const {
     tracks,
@@ -29,56 +40,151 @@ export const Timeline: React.FC = () => {
     selectClip,
     splitSelectedClip,
     deleteSelectedClip,
+    updateClip,
     toggleMuteTrack,
     toggleLockTrack,
   } = useEditorStore();
 
   const timelineContainerRef = useRef<HTMLDivElement>(null);
-  const [isScrubbing, setIsScrubbing] = useState(false);
+  const dragRef = useRef<DragMode>({ kind: 'none' });
+  const [, forceUpdate] = useState(0); // فقط لإعادة الرسم عند التغيير
 
-  // حساب موضع مؤشر الوقت (Playhead) بالبكسل
+  // حساب العرض الكلي للتايم لاين
   const playheadPositionPx = currentTime * zoom;
   const totalTimelineWidthPx = Math.max(duration * zoom, 1400);
 
-  // تحديث الوقت عند النقر أو السحب
-  const updateTimeFromPointer = useCallback(
-    (clientX: number) => {
-      if (!timelineContainerRef.current) return;
+  // تحديث الوقت عند السكراب
+  const getTimeFromClientX = useCallback(
+    (clientX: number): number => {
+      if (!timelineContainerRef.current) return 0;
       const rect = timelineContainerRef.current.getBoundingClientRect();
       const scrollLeft = timelineContainerRef.current.scrollLeft;
       const clickX = clientX - rect.left + scrollLeft;
-      const newTime = Math.max(0, Math.min(clickX / zoom, duration));
-      setCurrentTime(newTime);
+      return Math.max(0, Math.min(clickX / zoom, duration));
     },
-    [zoom, duration, setCurrentTime]
+    [zoom, duration]
   );
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    setIsScrubbing(true);
-    updateTimeFromPointer(e.clientX);
+  const getDeltaSeconds = useCallback(
+    (currentX: number, startX: number): number => {
+      return (currentX - startX) / zoom;
+    },
+    [zoom]
+  );
+
+  // ==================== Mouse Events (global) ====================
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      const drag = dragRef.current;
+
+      if (drag.kind === 'scrub') {
+        setCurrentTime(getTimeFromClientX(e.clientX));
+        return;
+      }
+
+      if (drag.kind === 'move') {
+        const delta = getDeltaSeconds(e.clientX, drag.startX);
+        const newStart = Math.max(0, drag.origStart + delta);
+        updateClip(drag.clipId, { startTime: newStart });
+        return;
+      }
+
+      if (drag.kind === 'trim-left') {
+        const delta = getDeltaSeconds(e.clientX, drag.startX);
+        const newStart = Math.max(0, drag.origStart + delta);
+        const maxStart = drag.origStart + drag.origDuration - 0.5;
+        const clampedStart = Math.min(newStart, maxStart);
+        const newDuration = drag.origDuration - (clampedStart - drag.origStart);
+        updateClip(drag.clipId, { startTime: clampedStart, duration: Math.max(0.5, newDuration) });
+        return;
+      }
+
+      if (drag.kind === 'trim-right') {
+        const delta = getDeltaSeconds(e.clientX, drag.startX);
+        const newDuration = Math.max(0.5, drag.origDuration + delta);
+        updateClip(drag.clipId, { duration: newDuration });
+        return;
+      }
+    };
+
+    const onMouseUp = () => {
+      dragRef.current = { kind: 'none' };
+      forceUpdate((n) => n + 1);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [getTimeFromClientX, getDeltaSeconds, setCurrentTime, updateClip]);
+
+  // ==================== السكراب على المسطرة ====================
+  const handleRulerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    dragRef.current = { kind: 'scrub' };
+    setCurrentTime(getTimeFromClientX(e.clientX));
   };
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isScrubbing) return;
-      updateTimeFromPointer(e.clientX);
-    };
+  // ==================== سحب المقطع للتحريك ====================
+  const handleClipMouseDown = (
+    e: React.MouseEvent,
+    clip: Clip,
+    trackId: string
+  ) => {
+    e.stopPropagation();
+    selectClip(clip.id);
+    // لا تبدأ سحباً إذا كان المقطع مقفلاً
+    const track = tracks.find((t) => t.id === trackId);
+    if (track?.isLocked) return;
 
-    const handleMouseUp = () => {
-      if (isScrubbing) setIsScrubbing(false);
+    dragRef.current = {
+      kind: 'move',
+      clipId: clip.id,
+      trackId,
+      startX: e.clientX,
+      origStart: clip.startTime,
     };
+  };
 
-    if (isScrubbing) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+  // ==================== سحب مقبض التقليص الأيسر ====================
+  const handleTrimLeftMouseDown = (
+    e: React.MouseEvent,
+    clip: Clip,
+    trackId: string
+  ) => {
+    e.stopPropagation();
+    const track = tracks.find((t) => t.id === trackId);
+    if (track?.isLocked) return;
+    dragRef.current = {
+      kind: 'trim-left',
+      clipId: clip.id,
+      trackId,
+      startX: e.clientX,
+      origStart: clip.startTime,
+      origDuration: clip.duration,
     };
-  }, [isScrubbing, updateTimeFromPointer]);
+  };
 
-  // توليد علامات الثواني للمسطرة
+  // ==================== سحب مقبض التقليص الأيمن ====================
+  const handleTrimRightMouseDown = (
+    e: React.MouseEvent,
+    clip: Clip,
+    trackId: string
+  ) => {
+    e.stopPropagation();
+    const track = tracks.find((t) => t.id === trackId);
+    if (track?.isLocked) return;
+    dragRef.current = {
+      kind: 'trim-right',
+      clipId: clip.id,
+      trackId,
+      startX: e.clientX,
+      origDuration: clip.duration,
+    };
+  };
+
+  // ==================== مسطرة الثواني ====================
   const renderTimeRuler = () => {
     const marks = [];
     const step = zoom < 25 ? 5 : zoom < 50 ? 2 : 1;
@@ -100,7 +206,7 @@ export const Timeline: React.FC = () => {
     return marks;
   };
 
-  // رسم موجة صوتية عشوائية جمالية (Audio Waveform)
+  // ==================== موجة صوتية ====================
   const renderWaveform = (clipId: string) => {
     const bars = [];
     const seed = clipId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -114,14 +220,17 @@ export const Timeline: React.FC = () => {
         />
       );
     }
-    return <div className="absolute inset-x-2 bottom-1.5 top-5 flex items-center gap-0.5 overflow-hidden opacity-60 pointer-events-none">{bars}</div>;
+    return (
+      <div className="absolute inset-x-2 bottom-1.5 top-5 flex items-center gap-0.5 overflow-hidden opacity-60 pointer-events-none">
+        {bars}
+      </div>
+    );
   };
 
   return (
     <div className="h-72 shrink-0 w-full border-t border-zinc-800 bg-zinc-950 flex flex-col select-none z-20">
       {/* شريط أدوات التايم لاين العلوي */}
       <div className="h-11 border-b border-zinc-800/80 px-4 flex items-center justify-between bg-zinc-900/50 shrink-0">
-        {/* أزرار العمليات: قص، حذف، مغناطيس */}
         <div className="flex items-center gap-1">
           <button
             onClick={splitSelectedClip}
@@ -151,7 +260,7 @@ export const Timeline: React.FC = () => {
           </button>
         </div>
 
-        {/* التحكم بمستوى تكبير وتصغير التايم لاين Zoom */}
+        {/* تكبير / تصغير */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setZoom(zoom - 5)}
@@ -178,9 +287,9 @@ export const Timeline: React.FC = () => {
         </div>
       </div>
 
-      {/* مساحة التراكات ومسار المؤشر */}
+      {/* مساحة التراكات */}
       <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* أسماء التراكات والأقفال الجانبية (Track Headers) */}
+        {/* رؤوس التراكات */}
         <div className="w-44 border-l border-zinc-800 bg-zinc-950 flex flex-col shrink-0 z-10">
           <div className="h-7 border-b border-zinc-800 bg-zinc-900/30 flex items-center px-3 text-[10px] font-bold text-zinc-500">
             المسارات (Tracks)
@@ -200,20 +309,14 @@ export const Timeline: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-1 text-zinc-500">
-                  <button
-                    onClick={() => toggleMuteTrack(track.id)}
-                    className="p-1 hover:text-zinc-200"
-                  >
+                  <button onClick={() => toggleMuteTrack(track.id)} className="p-1 hover:text-zinc-200">
                     {track.isMuted ? (
                       <VolumeX className="w-3.5 h-3.5 text-red-400" />
                     ) : (
                       <Volume2 className="w-3.5 h-3.5" />
                     )}
                   </button>
-                  <button
-                    onClick={() => toggleLockTrack(track.id)}
-                    className="p-1 hover:text-zinc-200"
-                  >
+                  <button onClick={() => toggleLockTrack(track.id)} className="p-1 hover:text-zinc-200">
                     {track.isLocked ? (
                       <Lock className="w-3.5 h-3.5 text-amber-400" />
                     ) : (
@@ -226,16 +329,16 @@ export const Timeline: React.FC = () => {
           </div>
         </div>
 
-        {/* مساحة الخط الزمني القابلة للسحب (Scrollable Timeline Canvas) */}
+        {/* الخط الزمني القابل للتمرير */}
         <div
           ref={timelineContainerRef}
-          onMouseDown={handleMouseDown}
-          className="flex-1 overflow-x-auto overflow-y-hidden relative bg-zinc-950/70 cursor-pointer"
+          className="flex-1 overflow-x-auto overflow-y-hidden relative bg-zinc-950/70"
         >
-          {/* مسطرة الثواني */}
+          {/* مسطرة السحب لتغيير الوقت */}
           <div
             style={{ width: `${totalTimelineWidthPx}px` }}
-            className="h-7 border-b border-zinc-800 bg-zinc-900/40 relative"
+            className="h-7 border-b border-zinc-800 bg-zinc-900/40 relative cursor-col-resize"
+            onMouseDown={handleRulerMouseDown}
           >
             {renderTimeRuler()}
           </div>
@@ -254,23 +357,25 @@ export const Timeline: React.FC = () => {
                   const isSelected = selectedClipId === clip.id;
                   const clipLeftPx = clip.startTime * zoom;
                   const clipWidthPx = clip.duration * zoom;
+                  const isDragging =
+                    (dragRef.current.kind === 'move' && dragRef.current.clipId === clip.id) ||
+                    (dragRef.current.kind === 'trim-left' && dragRef.current.clipId === clip.id) ||
+                    (dragRef.current.kind === 'trim-right' && dragRef.current.clipId === clip.id);
 
                   return (
                     <div
                       key={clip.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        selectClip(clip.id);
-                      }}
+                      onMouseDown={(e) => handleClipMouseDown(e, clip, track.id)}
                       style={{
                         left: `${clipLeftPx}px`,
                         width: `${clipWidthPx}px`,
                       }}
-                      className={`absolute top-1 bottom-1 rounded-xl px-2.5 flex items-center justify-between overflow-hidden cursor-pointer transition border ${
+                      className={`absolute top-1 bottom-1 rounded-xl overflow-hidden cursor-grab active:cursor-grabbing transition-shadow border ${
                         isSelected
                           ? 'ring-2 ring-amber-400 border-amber-300 shadow-lg shadow-amber-500/20 z-10'
                           : 'border-zinc-700/60 hover:border-zinc-500'
-                      } ${
+                      } ${isDragging ? 'opacity-80 ring-2 ring-white/30' : ''}
+                      ${
                         clip.type === 'video'
                           ? 'bg-gradient-to-r from-blue-900/80 to-indigo-900/80 text-blue-100'
                           : clip.type === 'text'
@@ -278,11 +383,21 @@ export const Timeline: React.FC = () => {
                           : 'bg-gradient-to-r from-emerald-950 to-teal-900 text-emerald-200'
                       }`}
                     >
-                      {/* موجات الصوت لمسار الصوت */}
+                      {/* موجات صوتية */}
                       {clip.type === 'audio' && renderWaveform(clip.id)}
 
+                      {/* مقبض التقليص الأيسر (Trim Left) */}
+                      <div
+                        onMouseDown={(e) => handleTrimLeftMouseDown(e, clip, track.id)}
+                        className="absolute top-0 bottom-0 right-0 w-2.5 cursor-ew-resize flex items-center justify-center group z-20"
+                        style={{ right: 'auto', left: 0 }}
+                        title="سحب لضبط نقطة البداية"
+                      >
+                        <div className="w-1 h-8 bg-white/30 group-hover:bg-amber-400/80 rounded-full transition" />
+                      </div>
+
                       {/* محتوى المقطع */}
-                      <div className="flex items-center gap-1.5 truncate z-10">
+                      <div className="flex items-center gap-1.5 truncate z-10 px-3 h-full">
                         {clip.thumbnailUrl && (
                           <img
                             src={clip.thumbnailUrl}
@@ -293,9 +408,19 @@ export const Timeline: React.FC = () => {
                         <span className="text-[11px] font-bold truncate">{clip.title}</span>
                       </div>
 
-                      <span className="text-[9px] font-mono opacity-60 shrink-0 z-10">
+                      <span className="absolute left-2 bottom-1 text-[9px] font-mono opacity-60 z-10">
                         {clip.duration.toFixed(1)}s
                       </span>
+
+                      {/* مقبض التقليص الأيمن (Trim Right) */}
+                      <div
+                        onMouseDown={(e) => handleTrimRightMouseDown(e, clip, track.id)}
+                        className="absolute top-0 bottom-0 left-0 w-2.5 cursor-ew-resize flex items-center justify-center group z-20"
+                        style={{ left: 'auto', right: 0 }}
+                        title="سحب لضبط نقطة النهاية"
+                      >
+                        <div className="w-1 h-8 bg-white/30 group-hover:bg-amber-400/80 rounded-full transition" />
+                      </div>
                     </div>
                   );
                 })}
@@ -303,12 +428,11 @@ export const Timeline: React.FC = () => {
             ))}
           </div>
 
-          {/* مؤشر التشغيل الأحمر التفاعلي (Playhead Scrubber) */}
+          {/* مؤشر التشغيل (Playhead) */}
           <div
             style={{ left: `${playheadPositionPx}px` }}
             className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-30 pointer-events-none flex flex-col items-center"
           >
-            {/* رأس المؤشر المقلوب */}
             <div className="w-3.5 h-3.5 bg-red-500 transform rotate-45 -mt-1.5 shadow-md shadow-red-500/50" />
           </div>
         </div>

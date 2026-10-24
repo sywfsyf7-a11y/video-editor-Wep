@@ -54,6 +54,11 @@ export interface Clip {
   fontSize?: number;
   textColor?: string;
   isAiEnhanced?: boolean;
+  // ضبط الألوان (Color Grading)
+  brightness?: number;   // 50–150، الافتراضي 100
+  contrast?: number;     // 50–150، الافتراضي 100
+  saturation?: number;   // 0–200، الافتراضي 100
+  hue?: number;          // -180 إلى 180، الافتراضي 0
 }
 
 export interface Track {
