@@ -87,7 +87,16 @@ export function useExportEngine() {
           message: `تحميل الملف ${i + 1}/${options.uploadedBlobs.length}: ${blob.name}`,
         });
 
-        const fileData = await fetchFile(blob.url);
+        let fileData;
+        try {
+          fileData = await fetchFile(blob.url);
+        } catch (fetchErr) {
+          console.warn(`CORS or network error fetching ${blob.url}, attempting fallback fetch via proxy/mode...`, fetchErr);
+          const response = await fetch(blob.url, { mode: 'cors' });
+          if (!response.ok) throw new Error(`فشل تحميل الملف ${blob.name} بسبب قيود الأمان (CORS). يرجى رفع الملف محلياً.`);
+          const blobData = await response.blob();
+          fileData = await fetchFile(blobData);
+        }
         await ffmpeg.writeFile(fileName, fileData);
         inputFiles.push(fileName);
       }

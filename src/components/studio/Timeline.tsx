@@ -19,14 +19,14 @@ import {
 } from 'lucide-react';
 
 // ========================
-// أنواع السحب على التايم لاين
+// أنواع السحب على التايم لاين (مُحسنة للأداء)
 // ========================
 type DragMode =
   | { kind: 'none' }
   | { kind: 'scrub' }
-  | { kind: 'move'; clipId: string; trackId: string; startX: number; origStart: number }
-  | { kind: 'trim-left'; clipId: string; trackId: string; startX: number; origStart: number; origDuration: number }
-  | { kind: 'trim-right'; clipId: string; trackId: string; startX: number; origDuration: number };
+  | { kind: 'move'; clipId: string; trackId: string; startX: number; origStart: number; currentDeltaX: number }
+  | { kind: 'trim-left'; clipId: string; trackId: string; startX: number; origStart: number; origDuration: number; currentDeltaX: number }
+  | { kind: 'trim-right'; clipId: string; trackId: string; startX: number; origDuration: number; currentDeltaX: number };
 
 export const Timeline: React.FC = () => {
   const {
@@ -77,37 +77,33 @@ export const Timeline: React.FC = () => {
     const onMouseMove = (e: MouseEvent) => {
       const drag = dragRef.current;
 
-      if (drag.kind === 'scrub') {
-        setCurrentTime(getTimeFromClientX(e.clientX));
-        return;
-      }
+      if (drag.kind === 'none' || drag.kind === 'scrub') return;
 
+      // تحديث الدلتا بسلاسة عبر الـ ref بدون تحديث الـ store في كل بكسل
+      const deltaX = e.clientX - drag.startX;
+      drag.currentDeltaX = deltaX;
+      forceUpdate((n) => n + 1);
+    };
+
+    const onMouseUp = () => {
+      const drag = dragRef.current;
       if (drag.kind === 'move') {
-        const delta = getDeltaSeconds(e.clientX, drag.startX);
-        const newStart = Math.max(0, drag.origStart + delta);
+        const deltaSec = drag.currentDeltaX / zoom;
+        const newStart = Math.max(0, drag.origStart + deltaSec);
         updateClip(drag.clipId, { startTime: newStart });
-        return;
-      }
-
-      if (drag.kind === 'trim-left') {
-        const delta = getDeltaSeconds(e.clientX, drag.startX);
-        const newStart = Math.max(0, drag.origStart + delta);
+      } else if (drag.kind === 'trim-left') {
+        const deltaSec = drag.currentDeltaX / zoom;
+        const newStart = Math.max(0, drag.origStart + deltaSec);
         const maxStart = drag.origStart + drag.origDuration - 0.5;
         const clampedStart = Math.min(newStart, maxStart);
         const newDuration = drag.origDuration - (clampedStart - drag.origStart);
         updateClip(drag.clipId, { startTime: clampedStart, duration: Math.max(0.5, newDuration) });
-        return;
-      }
-
-      if (drag.kind === 'trim-right') {
-        const delta = getDeltaSeconds(e.clientX, drag.startX);
-        const newDuration = Math.max(0.5, drag.origDuration + delta);
+      } else if (drag.kind === 'trim-right') {
+        const deltaSec = drag.currentDeltaX / zoom;
+        const newDuration = Math.max(0.5, drag.origDuration + deltaSec);
         updateClip(drag.clipId, { duration: newDuration });
-        return;
       }
-    };
 
-    const onMouseUp = () => {
       dragRef.current = { kind: 'none' };
       forceUpdate((n) => n + 1);
     };
@@ -118,7 +114,7 @@ export const Timeline: React.FC = () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [getTimeFromClientX, getDeltaSeconds, setCurrentTime, updateClip]);
+  }, [getTimeFromClientX, zoom, setCurrentTime, updateClip]);
 
   // ==================== السكراب على المسطرة ====================
   const handleRulerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -144,6 +140,7 @@ export const Timeline: React.FC = () => {
       trackId,
       startX: e.clientX,
       origStart: clip.startTime,
+      currentDeltaX: 0,
     };
   };
 
@@ -163,6 +160,7 @@ export const Timeline: React.FC = () => {
       startX: e.clientX,
       origStart: clip.startTime,
       origDuration: clip.duration,
+      currentDeltaX: 0,
     };
   };
 
@@ -181,6 +179,7 @@ export const Timeline: React.FC = () => {
       trackId,
       startX: e.clientX,
       origDuration: clip.duration,
+      currentDeltaX: 0,
     };
   };
 
@@ -362,13 +361,28 @@ export const Timeline: React.FC = () => {
                     (dragRef.current.kind === 'trim-left' && dragRef.current.clipId === clip.id) ||
                     (dragRef.current.kind === 'trim-right' && dragRef.current.clipId === clip.id);
 
+                  let visualLeft = clipLeftPx;
+                  let visualWidth = clipWidthPx;
+
+                  if (isDragging) {
+                    const drag = dragRef.current;
+                    if (drag.kind === 'move') {
+                      visualLeft += drag.currentDeltaX;
+                    } else if (drag.kind === 'trim-left') {
+                      visualLeft += drag.currentDeltaX;
+                      visualWidth -= drag.currentDeltaX;
+                    } else if (drag.kind === 'trim-right') {
+                      visualWidth += drag.currentDeltaX;
+                    }
+                  }
+
                   return (
                     <div
                       key={clip.id}
                       onMouseDown={(e) => handleClipMouseDown(e, clip, track.id)}
                       style={{
-                        left: `${clipLeftPx}px`,
-                        width: `${clipWidthPx}px`,
+                        left: `${visualLeft}px`,
+                        width: `${Math.max(10, visualWidth)}px`,
                       }}
                       className={`absolute top-1 bottom-1 rounded-xl overflow-hidden cursor-grab active:cursor-grabbing transition-shadow border ${
                         isSelected

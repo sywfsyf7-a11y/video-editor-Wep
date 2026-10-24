@@ -27,6 +27,8 @@ export const PreviewPlayer: React.FC = () => {
     resolution,
     aspectRatio,
     tracks,
+    undo,
+    redo,
   } = useEditorStore();
 
   const currentRes = RESOLUTIONS[resolution];
@@ -101,6 +103,19 @@ export const PreviewPlayer: React.FC = () => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+      if (e.ctrlKey || e.metaKey) {
+        if (e.code === 'KeyZ') {
+          e.preventDefault();
+          if (e.shiftKey) redo();
+          else undo();
+          return;
+        }
+        if (e.code === 'KeyY') {
+          e.preventDefault();
+          redo();
+          return;
+        }
+      }
       switch (e.code) {
         case 'Space': e.preventDefault(); togglePlay(); break;
         case 'ArrowLeft': e.preventDefault(); setCurrentTime(Math.max(0, currentTime - (e.shiftKey ? 1 : 5))); break;
@@ -111,7 +126,7 @@ export const PreviewPlayer: React.FC = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [togglePlay, setCurrentTime, currentTime, duration, splitSelectedClip, deleteSelectedClip]);
+  }, [togglePlay, setCurrentTime, currentTime, duration, splitSelectedClip, deleteSelectedClip, undo, redo]);
 
   // Timecode
   const formatTimecode = (s: number) => {

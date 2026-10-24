@@ -25,6 +25,10 @@ export const Header: React.FC = () => {
     setAspectRatio,
     setExportModalOpen,
     setAIModalOpen,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useEditorStore();
 
   const currentRes = RESOLUTIONS[resolution];
@@ -55,13 +59,21 @@ export const Header: React.FC = () => {
         {/* أزرار التراجع والإعادة */}
         <div className="flex items-center gap-0.5 text-zinc-400">
           <button
-            className="p-1.5 hover:text-zinc-100 hover:bg-zinc-900 rounded-lg transition"
+            onClick={undo}
+            disabled={!canUndo()}
+            className={`p-1.5 rounded-lg transition ${
+              canUndo() ? 'hover:text-zinc-100 hover:bg-zinc-900 cursor-pointer' : 'opacity-40 cursor-not-allowed'
+            }`}
             title="تراجع (Ctrl+Z)"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
           <button
-            className="p-1.5 hover:text-zinc-100 hover:bg-zinc-900 rounded-lg transition"
+            onClick={redo}
+            disabled={!canRedo()}
+            className={`p-1.5 rounded-lg transition ${
+              canRedo() ? 'hover:text-zinc-100 hover:bg-zinc-900 cursor-pointer' : 'opacity-40 cursor-not-allowed'
+            }`}
             title="إعادة (Ctrl+Y)"
           >
             <RotateCw className="w-4 h-4" />
